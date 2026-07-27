@@ -5,7 +5,6 @@ sobra — com simulação de investimento e histórico para comparar a evoluçã
 
 Pensado para ser o que a maioria das pessoas monta no Excel, só que mais rápido e sem trabalho manual.
 
-🔗 **[Demo ao vivo](#)** _(adicione o link depois do deploy)_
 
 ---
 
