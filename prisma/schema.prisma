@@ -1,0 +1,188 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============ Better Auth (required shape — do not rename fields) ============
+
+model User {
+  id            String   @id @default(cuid())
+  name          String
+  email         String
+  emailVerified Boolean  @default(false)
+  image         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  sessions Session[]
+  accounts Account[]
+
+  // App data
+  transactions          Transaction[]
+  categories            Category[]
+  monthlyPlans          MonthlyPlan[]
+  fixedExpenseTemplates FixedExpenseTemplate[]
+
+  @@unique([email])
+  @@map("user")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@unique([providerId, accountId])
+  @@map("account")
+}
+
+model Verification {
+  id         String    @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime? @default(now())
+  updatedAt  DateTime? @updatedAt
+
+  @@map("verification")
+}
+
+// ============ App models ============
+// Deliberately simple: no accounts/wallets, no transfers, no running balance.
+// A Transaction just belongs to a user. "Saldo" is always computed on the fly
+// for a given month (income - expenses - planned investment), never stored.
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+}
+
+enum ExpenseSubtype {
+  FIXED
+  VARIABLE
+}
+
+model Category {
+  id        String          @id @default(cuid())
+  name      String
+  kind      TransactionType @default(EXPENSE)
+  color     String?
+  createdAt DateTime        @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  transactions Transaction[]
+
+  @@unique([userId, name])
+  @@index([userId])
+  @@map("category")
+}
+
+model Transaction {
+  id          String          @id @default(cuid())
+  description String
+  amount      Decimal         @db.Decimal(14, 2)
+  type        TransactionType
+  // Only meaningful when type = EXPENSE
+  subtype     ExpenseSubtype?
+  date        DateTime
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  // Set when this row was auto-generated from a recurring fixed expense
+  // (see FixedExpenseTemplate). Editing/deleting this row only affects this
+  // one month — it never touches the template or other months, so past
+  // history stays accurate even if the template changes later.
+  templateId String?
+  template   FixedExpenseTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([categoryId])
+  @@index([date])
+  @@index([templateId])
+  @@map("transaction")
+}
+
+// A recurring fixed expense definition (rent, subscriptions, etc). Doesn't
+// hold any month's actual value — it's a template that gets "materialized"
+// into a real, independent Transaction row for each active month the first
+// time that month is loaded (see src/lib/fixed-expenses.ts). This way,
+// editing the template only affects months not yet materialized, and past
+// months already recorded never silently change.
+model FixedExpenseTemplate {
+  id          String   @id @default(cuid())
+  description String
+  amount      Decimal  @db.Decimal(14, 2)
+  // Day of the month the bill is due (1-31, clamped to shorter months).
+  dayOfMonth  Int
+  startMonth  Int
+  startYear   Int
+  // null = repeats indefinitely, with no end.
+  endMonth    Int?
+  endYear     Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  transactions Transaction[]
+
+  @@index([userId])
+  @@map("fixed_expense_template")
+}
+
+// One row per user per calendar month: the "Investir" simulation — what % of
+// that month's income the user plans to set aside, and whether they've
+// confirmed they actually did it.
+model MonthlyPlan {
+  id               String   @id @default(cuid())
+  month            Int
+  year             Int
+  investPercentage Decimal  @default(0) @db.Decimal(5, 2)
+  confirmed        Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, month, year])
+  @@map("monthly_plan")
+}
