@@ -132,10 +132,19 @@ model Transaction {
   templateId String?
   template   FixedExpenseTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
 
+  // Installments ("parcelado"): all parcelas of one purchase share the same
+  // installmentGroupId. Each row is otherwise an independent Transaction —
+  // editing/deleting one only affects that parcela unless the caller
+  // explicitly targets the whole group (see /api/transactions/installment-group).
+  installmentGroupId String?
+  installmentNumber  Int?
+  installmentTotal   Int?
+
   @@index([userId])
   @@index([categoryId])
   @@index([date])
   @@index([templateId])
+  @@index([installmentGroupId])
   @@map("transaction")
 }
 

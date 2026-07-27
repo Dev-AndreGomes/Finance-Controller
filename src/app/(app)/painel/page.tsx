@@ -270,7 +270,14 @@ export default function PainelPage() {
                   className="entry-row flex items-center justify-between gap-3 px-4 sm:px-6 py-3"
                 >
                   <div className="min-w-0">
-                    <p className="text-sm truncate">{tx.description}</p>
+                    <p className="text-sm truncate flex items-center gap-2">
+                      {tx.description}
+                      {tx.installmentTotal && (
+                        <span className="text-[10px] uppercase tracking-wide bg-accent/10 text-accent rounded-full px-1.5 py-0.5 shrink-0">
+                          Parcela {tx.installmentNumber}/{tx.installmentTotal}
+                        </span>
+                      )}
+                    </p>
                     <p className="text-xs text-muted mt-0.5 truncate">
                       {formatDate(tx.date)}
                       {tx.category ? ` · ${tx.category.name}` : ''}
@@ -442,10 +449,13 @@ function AddTransactionModal({
     editingTransaction ? editingTransaction.date.slice(0, 10) : date.toISOString().slice(0, 10),
   );
   const [categoryId, setCategoryId] = useState(editingTransaction?.categoryId ?? '');
+  const [isInstallment, setIsInstallment] = useState(false);
+  const [installmentTotal, setInstallmentTotal] = useState('2');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const relevantCategories = categories.filter((c) => (tab === 'INCOME' ? c.kind === 'INCOME' : c.kind === 'EXPENSE'));
+  const canInstallment = tab === 'VARIABLE' && !editingTransaction;
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -459,6 +469,8 @@ function AddTransactionModal({
         subtype: tab === 'FIXED' ? 'FIXED' : tab === 'VARIABLE' ? 'VARIABLE' : undefined,
         date: new Date(txDate).toISOString(),
         categoryId: tab === 'FIXED' ? undefined : categoryId || undefined,
+        isInstallment: canInstallment ? isInstallment : undefined,
+        installmentTotal: canInstallment && isInstallment ? parseInt(installmentTotal, 10) : undefined,
       };
 
       const res = await fetch(
@@ -473,8 +485,10 @@ function AddTransactionModal({
         const data = await res.json();
         throw new Error(data.message ?? 'Não foi possível salvar.');
       }
-      const saved: Transaction = await res.json();
-      onSaved(saved);
+      const saved = await res.json();
+      // Installment purchases return an array (one row per parcela) — use
+      // the first parcela just to figure out which month to jump to.
+      onSaved(Array.isArray(saved) ? saved[0] : saved);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Não foi possível salvar.');
     } finally {
@@ -500,7 +514,9 @@ function AddTransactionModal({
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-xs text-muted uppercase tracking-wide">Valor</label>
+            <label className="text-xs text-muted uppercase tracking-wide">
+              {canInstallment && isInstallment ? 'Valor total' : 'Valor'}
+            </label>
             <input
               type="number"
               step="0.01"
@@ -514,7 +530,7 @@ function AddTransactionModal({
           </div>
           <div>
             <label className="text-xs text-muted uppercase tracking-wide">
-              {tab === 'FIXED' ? 'Vencimento' : 'Data'}
+              {tab === 'FIXED' ? 'Vencimento' : canInstallment && isInstallment ? 'Data da 1ª parcela' : 'Data'}
             </label>
             <input
               type="date"
@@ -525,6 +541,43 @@ function AddTransactionModal({
             />
           </div>
         </div>
+
+        {canInstallment && (
+          <>
+            <label className="flex items-center gap-2 text-sm bg-surface-alt rounded-lg px-3 py-2.5">
+              <input
+                type="checkbox"
+                checked={isInstallment}
+                onChange={(e) => setIsInstallment(e.target.checked)}
+                className="accent-accent"
+              />
+              É parcelado?
+            </label>
+            {isInstallment && (
+              <div>
+                <label className="text-xs text-muted uppercase tracking-wide">Número de parcelas</label>
+                <input
+                  type="number"
+                  min={2}
+                  max={60}
+                  required
+                  value={installmentTotal}
+                  onChange={(e) => setInstallmentTotal(e.target.value)}
+                  className={`${inputClass} mt-1`}
+                />
+                {amount && installmentTotal && parseInt(installmentTotal, 10) >= 2 && (
+                  <p className="text-[11px] text-muted mt-1">
+                    {installmentTotal}x de aproximadamente{' '}
+                    {(parseFloat(amount) / parseInt(installmentTotal, 10)).toLocaleString('pt-BR', {
+                      style: 'currency',
+                      currency: 'BRL',
+                    })}
+                  </p>
+                )}
+              </div>
+            )}
+          </>
+        )}
 
         {tab !== 'FIXED' && (
           <div>

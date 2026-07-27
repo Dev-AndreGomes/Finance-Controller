@@ -7,6 +7,10 @@ export const createTransactionSchema = z.object({
   subtype: z.enum(['FIXED', 'VARIABLE']).optional(),
   date: z.string().datetime({ offset: true }).or(z.string().min(1)),
   categoryId: z.string().min(1).optional().nullable(),
+  // Installments ("parcelado") — only meaningful for VARIABLE expenses.
+  // `amount` above is the TOTAL purchase amount, split across installmentTotal parcelas.
+  isInstallment: z.boolean().optional(),
+  installmentTotal: z.number().int().min(2).max(60).optional(),
 });
 
 export const updateTransactionSchema = createTransactionSchema.partial();
@@ -37,6 +41,7 @@ export const updateFixedTemplateSchema = z.object({
   endMonth: z.number().int().min(1).max(12).nullable().optional(),
   endYear: z.number().int().min(2000).max(2100).nullable().optional(),
 });
+
 export const upsertPlanSchema = z.object({
   month: z.number().int().min(1).max(12),
   year: z.number().int().min(2000).max(2100),

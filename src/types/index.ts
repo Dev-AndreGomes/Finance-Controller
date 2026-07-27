@@ -17,6 +17,9 @@ export interface Transaction {
   date: string;
   categoryId: string | null;
   category?: Category | null;
+  installmentGroupId: string | null;
+  installmentNumber: number | null;
+  installmentTotal: number | null;
 }
 
 export interface FixedExpenseTemplate {
