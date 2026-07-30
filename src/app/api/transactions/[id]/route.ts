@@ -48,7 +48,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   }
 }
 
-export async function DELETE(_request: NextRequest, { params }: RouteParams) {
+export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
     const user = await getCurrentUser();
     if (!user) return unauthorized();
@@ -57,7 +57,45 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
     const existing = await prisma.transaction.findUnique({ where: { id } });
     if (!existing || existing.userId !== user.id) return notFound('Transação não encontrada');
 
+    const scope = new URL(request.url).searchParams.get('scope') === 'all' ? 'all' : 'only';
+
+    // "excluir de todos os meses" numa despesa fixa recorrente: apaga a
+    // despesa já lançada em qualquer mês (passado e futuro) e o próprio
+    // modelo, pra parar de gerar novas.
+    if (scope === 'all' && existing.templateId) {
+      await prisma.transaction.deleteMany({ where: { templateId: existing.templateId } });
+      await prisma.fixedExpenseTemplate.delete({ where: { id: existing.templateId } }).catch(() => {
+        // já pode ter sido apagado em outra aba/requisição, tudo bem
+      });
+      return NextResponse.json({ success: true });
+    }
+
+    // "excluir todas as parcelas" de uma compra parcelada
+    if (scope === 'all' && existing.installmentGroupId) {
+      await prisma.transaction.deleteMany({ where: { installmentGroupId: existing.installmentGroupId } });
+      return NextResponse.json({ success: true });
+    }
+
+    // exclusão simples: só essa linha
     await prisma.transaction.delete({ where: { id } });
+
+    // se era uma despesa fixa e o usuário só quis excluir esse mês, marca o
+    // skip pra não voltar a aparecer sozinha quando o mês for aberto de novo
+    if (existing.templateId) {
+      const d = new Date(existing.date);
+      await prisma.fixedExpenseSkip
+        .create({
+          data: {
+            templateId: existing.templateId,
+            month: d.getUTCMonth() + 1,
+            year: d.getUTCFullYear(),
+          },
+        })
+        .catch(() => {
+          // se já existir um skip pra esse mês (improvável), ignora
+        });
+    }
+
     return NextResponse.json({ success: true });
   } catch (error) {
     return serverError(error);

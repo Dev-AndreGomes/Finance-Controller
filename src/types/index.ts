@@ -17,6 +17,7 @@ export interface Transaction {
   date: string;
   categoryId: string | null;
   category?: Category | null;
+  templateId: string | null;
   installmentGroupId: string | null;
   installmentNumber: number | null;
   installmentTotal: number | null;

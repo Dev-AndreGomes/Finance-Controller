@@ -7,7 +7,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ============ Better Auth (required shape — do not rename fields) ============
+// ============ Better Auth (não mexer nos nomes dos campos, é o formato que a lib espera) ============
 
 model User {
   id            String   @id @default(cuid())
@@ -21,7 +21,7 @@ model User {
   sessions Session[]
   accounts Account[]
 
-  // App data
+  // dados do app em si
   transactions          Transaction[]
   categories            Category[]
   monthlyPlans          MonthlyPlan[]
@@ -76,10 +76,10 @@ model Verification {
   @@map("verification")
 }
 
-// ============ App models ============
-// Deliberately simple: no accounts/wallets, no transfers, no running balance.
-// A Transaction just belongs to a user. "Saldo" is always computed on the fly
-// for a given month (income - expenses - planned investment), never stored.
+// ============ Modelos do app ============
+// De propósito bem simples: sem conta bancária, sem transferência, sem saldo
+// guardado em lugar nenhum. O "saldo" é sempre calculado na hora (receita -
+// despesas - investimento planejado) pro mês que tá sendo visto, nunca salvo.
 
 enum TransactionType {
   INCOME
@@ -113,7 +113,7 @@ model Transaction {
   description String
   amount      Decimal         @db.Decimal(14, 2)
   type        TransactionType
-  // Only meaningful when type = EXPENSE
+  // só faz sentido quando type = EXPENSE
   subtype     ExpenseSubtype?
   date        DateTime
   createdAt   DateTime        @default(now())
@@ -125,17 +125,17 @@ model Transaction {
   categoryId String?
   category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
-  // Set when this row was auto-generated from a recurring fixed expense
-  // (see FixedExpenseTemplate). Editing/deleting this row only affects this
-  // one month — it never touches the template or other months, so past
-  // history stays accurate even if the template changes later.
+  // Preenchido quando essa linha foi gerada automaticamente por uma despesa
+  // fixa recorrente (olha o FixedExpenseTemplate). Editar/excluir essa linha
+  // só mexe nesse mês específico — nunca no template nem nos outros meses,
+  // assim o histórico não muda escondido se eu alterar o valor depois.
   templateId String?
   template   FixedExpenseTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
 
-  // Installments ("parcelado"): all parcelas of one purchase share the same
-  // installmentGroupId. Each row is otherwise an independent Transaction —
-  // editing/deleting one only affects that parcela unless the caller
-  // explicitly targets the whole group (see /api/transactions/installment-group).
+  // Parcelamento: todas as parcelas de uma compra compartilham o mesmo
+  // installmentGroupId. Fora isso cada linha é uma Transaction independente —
+  // editar/excluir uma não mexe nas outras (por enquanto não tem uma ação de
+  // "editar/excluir todas as parcelas de uma vez", só linha por linha mesmo).
   installmentGroupId String?
   installmentNumber  Int?
   installmentTotal   Int?
@@ -148,21 +148,36 @@ model Transaction {
   @@map("transaction")
 }
 
-// A recurring fixed expense definition (rent, subscriptions, etc). Doesn't
-// hold any month's actual value — it's a template that gets "materialized"
-// into a real, independent Transaction row for each active month the first
-// time that month is loaded (see src/lib/fixed-expenses.ts). This way,
-// editing the template only affects months not yet materialized, and past
-// months already recorded never silently change.
+// Guarda um (template, mês, ano) que o usuário mandou excluir só naquele mês
+// específico — sem isso, da próxima vez que esse mês fosse aberto o
+// ensureFixedExpenseInstances ia recriar a mesma despesa de novo.
+model FixedExpenseSkip {
+  id         String @id @default(cuid())
+  month      Int
+  year       Int
+
+  templateId String
+  template   FixedExpenseTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, month, year])
+  @@map("fixed_expense_skip")
+}
+
+// Uma despesa fixa recorrente (aluguel, assinatura, etc). Não guarda o valor
+// de nenhum mês específico — é um modelo que vai sendo "materializado" numa
+// Transaction de verdade, independente, na primeira vez que aquele mês é
+// aberto (ver src/lib/fixed-expenses.ts). Assim, editar o modelo só afeta os
+// meses que ainda não foram gerados, e o histórico dos meses passados nunca
+// muda escondido.
 model FixedExpenseTemplate {
   id          String   @id @default(cuid())
   description String
   amount      Decimal  @db.Decimal(14, 2)
-  // Day of the month the bill is due (1-31, clamped to shorter months).
+  // dia do vencimento (1-31, ajustado pra baixo em meses mais curtos)
   dayOfMonth  Int
   startMonth  Int
   startYear   Int
-  // null = repeats indefinitely, with no end.
+  // null = repete pra sempre, sem data de término
   endMonth    Int?
   endYear     Int?
   createdAt   DateTime @default(now())
@@ -172,6 +187,7 @@ model FixedExpenseTemplate {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   transactions Transaction[]
+  skips        FixedExpenseSkip[]
 
   @@index([userId])
   @@map("fixed_expense_template")

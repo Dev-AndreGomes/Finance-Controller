@@ -21,8 +21,12 @@ import {
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { Category, FixedExpenseTemplate, MonthlyPlan, Transaction } from '@/types';
 import { Card, Modal, inputClass, primaryButtonClass, secondaryButtonClass } from '@/components/ui';
+import { ConfirmDialog, ConfirmOption } from '@/components/ConfirmDialog';
 import { AnimatedAmount } from '@/components/AnimatedAmount';
+import { useToast } from '@/context/ToastContext';
 import { formatCurrency, formatDate, MONTH_NAMES } from '@/lib/format';
+import { AlertsPanel } from '@/components/AlertsPanel';
+import { MonthYearPicker } from '@/components/MonthYearPicker';
 
 type Tab = 'INCOME' | 'FIXED' | 'VARIABLE';
 
@@ -36,7 +40,6 @@ const TAB_CONFIG: Record<Tab, { label: string; addLabel: string; empty: string }
   },
 };
 
-const DONUT_COLORS = ['#1A237E', '#C8402F', '#1A8F5C', '#7F77DD', '#378ADD', '#D4537E'];
 const INVEST_PRESETS = [10, 20, 30, 50];
 
 function monthRange(month: number, year: number) {
@@ -47,6 +50,7 @@ function monthRange(month: number, year: number) {
 
 export default function PainelPage() {
   const today = new Date();
+  const showToast = useToast();
   const [month, setMonth] = useState(today.getMonth() + 1);
   const [year, setYear] = useState(today.getFullYear());
   const [hideValues, setHideValues] = useState(false);
@@ -62,6 +66,7 @@ export default function PainelPage() {
   const [showInvestModal, setShowInvestModal] = useState(false);
   const [showNewFixedModal, setShowNewFixedModal] = useState(false);
   const [showManageFixedModal, setShowManageFixedModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Transaction | null>(null);
 
   async function load() {
     const { start, end } = monthRange(month, year);
@@ -126,18 +131,50 @@ export default function PainelPage() {
   const activeList = listByTab[activeTab];
 
   const donutData = useMemo(() => {
-    const groups = new Map<string, number>();
+    const groups = new Map<string, { value: number; color: string }>();
     for (const t of activeList) {
       const label = activeTab === 'FIXED' ? t.description : t.category?.name ?? 'Sem categoria';
-      groups.set(label, (groups.get(label) ?? 0) + parseFloat(t.amount));
+      // usa a cor de verdade que a pessoa escolheu na categoria — sem
+      // categoria (ou aba de despesa fixa, que não tem categoria) cai num
+      // cinza neutro em vez de pegar uma cor aleatória da paleta
+      const color = activeTab === 'FIXED' ? 'var(--color-muted)' : t.category?.color ?? 'var(--color-muted)';
+      const existing = groups.get(label);
+      groups.set(label, { value: (existing?.value ?? 0) + parseFloat(t.amount), color });
     }
-    return Array.from(groups.entries()).map(([name, value]) => ({ name, value }));
+    return Array.from(groups.entries()).map(([name, { value, color }]) => ({ name, value, color }));
   }, [activeList, activeTab]);
 
-  async function handleDeleteTransaction(id: string) {
-    if (!confirm('Excluir este lançamento?')) return;
-    await fetch(`/api/transactions/${id}`, { method: 'DELETE' });
-    load();
+  // Monta as opções do modal de confirmação conforme o tipo do lançamento:
+  // despesa fixa recorrente e parcela têm a mesma dúvida ("só esse aqui ou
+  // todos?"), então reaproveito a mesma lógica pros dois casos.
+  function getDeleteOptions(tx: Transaction): ConfirmOption[] {
+    if (tx.templateId) {
+      return [
+        { label: 'Excluir apenas este mês', value: 'only' },
+        { label: 'Excluir de todos os meses (passado e futuro)', value: 'all', variant: 'danger' },
+      ];
+    }
+    if (tx.installmentTotal) {
+      return [
+        { label: 'Excluir apenas esta parcela', value: 'only' },
+        { label: 'Excluir todas as parcelas', value: 'all', variant: 'danger' },
+      ];
+    }
+    return [{ label: 'Excluir', value: 'only', variant: 'danger' }];
+  }
+
+  async function confirmDelete(scope: string) {
+    if (!deleteTarget) return;
+    try {
+      const res = await fetch(`/api/transactions/${deleteTarget.id}?scope=${scope}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Não foi possível excluir.');
+      showToast('success', 'Excluído com sucesso.');
+      load();
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Não foi possível excluir.');
+    } finally {
+      setDeleteTarget(null);
+    }
   }
 
   if (loading) return <p className="text-muted">Carregando painel…</p>;
@@ -159,18 +196,25 @@ export default function PainelPage() {
           <p className="text-sm text-muted mt-1">Seu resumo financeiro do mês</p>
         </div>
 
-        <div className="flex items-center gap-1 bg-surface border border-line rounded-lg px-2 py-1.5">
-          <button onClick={goToPreviousMonth} className="text-muted hover:text-ink p-1" aria-label="Mês anterior">
+        <div className="flex items-center gap-1 bg-surface border border-line rounded-lg px-1 py-1">
+          <button onClick={goToPreviousMonth} className="text-muted hover:text-ink p-1.5" aria-label="Mês anterior">
             <ChevronLeft size={16} />
           </button>
-          <span className="text-sm px-2 min-w-[9rem] text-center">
-            {MONTH_NAMES[month - 1]} de {year}
-          </span>
-          <button onClick={goToNextMonth} className="text-muted hover:text-ink p-1" aria-label="Próximo mês">
+          <MonthYearPicker
+            month={month}
+            year={year}
+            onChange={(m, y) => {
+              setMonth(m);
+              setYear(y);
+            }}
+          />
+          <button onClick={goToNextMonth} className="text-muted hover:text-ink p-1.5" aria-label="Próximo mês">
             <ChevronRight size={16} />
           </button>
         </div>
       </header>
+
+      <AlertsPanel totalIncome={totalIncome} totalExpenses={totalExpenses} balance={balance} />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
@@ -302,7 +346,7 @@ export default function PainelPage() {
                       <Pencil size={14} />
                     </button>
                     <button
-                      onClick={() => handleDeleteTransaction(tx.id)}
+                      onClick={() => setDeleteTarget(tx)}
                       className="text-muted hover:text-red transition-colors"
                       aria-label="Excluir"
                     >
@@ -327,8 +371,8 @@ export default function PainelPage() {
                 <ResponsiveContainer>
                   <PieChart>
                     <Pie data={donutData} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={2}>
-                      {donutData.map((_, i) => (
-                        <Cell key={i} fill={DONUT_COLORS[i % DONUT_COLORS.length]} stroke="var(--color-surface)" />
+                      {donutData.map((d, i) => (
+                        <Cell key={i} fill={d.color} stroke="var(--color-surface)" />
                       ))}
                     </Pie>
                     <Tooltip
@@ -344,12 +388,9 @@ export default function PainelPage() {
                 </ResponsiveContainer>
               </div>
               <div className="grid grid-cols-2 gap-x-4 gap-y-1 w-full mt-2 text-xs">
-                {donutData.map((d, i) => (
+                {donutData.map((d) => (
                   <div key={d.name} className="flex items-center gap-1.5 truncate">
-                    <span
-                      className="w-2 h-2 rounded-full shrink-0"
-                      style={{ backgroundColor: DONUT_COLORS[i % DONUT_COLORS.length] }}
-                    />
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
                     <span className="truncate text-muted">{d.name}</span>
                   </div>
                 ))}
@@ -383,13 +424,13 @@ export default function PainelPage() {
           onSaved={(saved) => {
             setShowAddModal(false);
             setEditingTransaction(null);
+            showToast('success', editingTransaction ? 'Lançamento atualizado!' : 'Lançamento adicionado!');
             const savedDate = new Date(saved.date);
             const savedMonth = savedDate.getUTCMonth() + 1;
             const savedYear = savedDate.getUTCFullYear();
             if (savedMonth !== month || savedYear !== year) {
-              // The lançamento belongs to a different month than the one being
-              // viewed — jump there so it's obviously visible instead of just
-              // disappearing from the current list (which looks like it failed).
+              // O lançamento é de outro mês — pula pra lá pra ficar óbvio que
+              // salvou (senão parece que sumiu, já que some da lista atual).
               setMonth(savedMonth);
               setYear(savedYear);
             } else {
@@ -407,6 +448,7 @@ export default function PainelPage() {
           onSaved={(updated) => {
             setPlan(updated);
             setShowInvestModal(false);
+            showToast('success', 'Simulação de investimento salva!');
           }}
         />
       )}
@@ -419,7 +461,22 @@ export default function PainelPage() {
           onSaved={() => {
             setShowNewFixedModal(false);
             load();
+            showToast('success', 'Despesa fixa criada com sucesso!');
           }}
+        />
+      )}
+
+      {deleteTarget && (
+        <ConfirmDialog
+          title="Excluir lançamento"
+          description={
+            deleteTarget.templateId || deleteTarget.installmentTotal
+              ? 'Esse lançamento se repete em mais de um mês. O que você quer fazer?'
+              : undefined
+          }
+          options={getDeleteOptions(deleteTarget)}
+          onSelect={confirmDelete}
+          onCancel={() => setDeleteTarget(null)}
         />
       )}
 
@@ -771,8 +828,12 @@ function NewFixedExpenseModal({
 }
 
 function ManageFixedTemplatesModal({ onClose, onChanged }: { onClose: () => void; onChanged: () => void }) {
+  const showToast = useToast();
   const [templates, setTemplates] = useState<FixedExpenseTemplate[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pendingAction, setPendingAction] = useState<{ template: FixedExpenseTemplate; kind: 'stop' | 'delete' } | null>(
+    null,
+  );
 
   async function load() {
     const res = await fetch('/api/fixed-expense-templates');
@@ -784,23 +845,29 @@ function ManageFixedTemplatesModal({ onClose, onChanged }: { onClose: () => void
     load();
   }, []);
 
-  async function handleStop(template: FixedExpenseTemplate) {
-    const now = new Date();
-    if (!confirm(`Parar de repetir "${template.description}" a partir de agora?`)) return;
-    await fetch(`/api/fixed-expense-templates/${template.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ endMonth: now.getMonth() + 1, endYear: now.getFullYear() }),
-    });
-    load();
-    onChanged();
-  }
-
-  async function handleDelete(id: string) {
-    if (!confirm('Excluir essa despesa fixa recorrente? Os meses já lançados continuam no histórico.')) return;
-    await fetch(`/api/fixed-expense-templates/${id}`, { method: 'DELETE' });
-    load();
-    onChanged();
+  async function confirmAction() {
+    if (!pendingAction) return;
+    const { template, kind } = pendingAction;
+    try {
+      if (kind === 'stop') {
+        const now = new Date();
+        await fetch(`/api/fixed-expense-templates/${template.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ endMonth: now.getMonth() + 1, endYear: now.getFullYear() }),
+        });
+        showToast('success', 'A despesa fixa vai parar de se repetir a partir de agora.');
+      } else {
+        await fetch(`/api/fixed-expense-templates/${template.id}`, { method: 'DELETE' });
+        showToast('success', 'Despesa fixa excluída.');
+      }
+      load();
+      onChanged();
+    } catch {
+      showToast('error', 'Não foi possível concluir a ação.');
+    } finally {
+      setPendingAction(null);
+    }
   }
 
   return (
@@ -823,13 +890,17 @@ function ManageFixedTemplatesModal({ onClose, onChanged }: { onClose: () => void
                       {isEnded ? ` · até ${MONTH_NAMES[t.endMonth! - 1]}/${t.endYear}` : ' · sem data de término'}
                     </p>
                   </div>
-                  <button onClick={() => handleDelete(t.id)} className="text-muted hover:text-red transition-colors" aria-label="Excluir">
+                  <button
+                    onClick={() => setPendingAction({ template: t, kind: 'delete' })}
+                    className="text-muted hover:text-red transition-colors"
+                    aria-label="Excluir"
+                  >
                     <Trash2 size={14} />
                   </button>
                 </div>
                 {!isEnded && (
                   <button
-                    onClick={() => handleStop(t)}
+                    onClick={() => setPendingAction({ template: t, kind: 'stop' })}
                     className="text-xs text-accent hover:underline mt-2"
                   >
                     Parar de repetir a partir de agora
@@ -845,8 +916,23 @@ function ManageFixedTemplatesModal({ onClose, onChanged }: { onClose: () => void
           Fechar
         </button>
       </div>
-    </Modal>
-  );
+
+      {pendingAction && (
+        <ConfirmDialog
+          title={pendingAction.kind === 'stop' ? 'Parar de repetir' : 'Excluir despesa fixa'}
+          description={
+            pendingAction.kind === 'stop'
+              ? `"${pendingAction.template.description}" vai parar de aparecer a partir de agora. Os meses já lançados continuam intactos.`
+              : `Excluir "${pendingAction.template.description}"? Os meses já lançados continuam no histórico, só para de gerar novos.`
+          }
+          options={[
+            { label: pendingAction.kind === 'stop' ? 'Parar de repetir' : 'Excluir', value: 'confirm', variant: 'danger' },
+          ]}
+          onSelect={confirmAction}
+          onCancel={() => setPendingAction(null)}
+        />
+      )}
+    </Modal>  );
 }
 
 function InvestModal({

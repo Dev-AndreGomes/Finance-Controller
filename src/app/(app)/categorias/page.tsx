@@ -3,11 +3,14 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { Card, Modal, inputClass, primaryButtonClass, secondaryButtonClass } from '@/components/ui';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { useToast } from '@/context/ToastContext';
 import { Category, TransactionType } from '@/types';
 
-const SWATCHES = ['#1A237E', '#1A8F5C', '#C8402F', '#7F77DD', '#378ADD', '#D4537E'];
+const SWATCHES = ['#1A237E', '#1A8F5C', '#C8402F', '#7207c4 ', '#378ADD', '#D4537E'];
 
 export default function CategoriasPage() {
+  const showToast = useToast();
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -18,6 +21,7 @@ export default function CategoriasPage() {
   const [color, setColor] = useState(SWATCHES[0]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Category | null>(null);
 
   async function load() {
     const res = await fetch('/api/categories');
@@ -63,6 +67,7 @@ export default function CategoriasPage() {
       }
       setShowModal(false);
       load();
+      showToast('success', editing ? 'Categoria atualizada!' : 'Categoria criada!');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Não foi possível salvar.');
     } finally {
@@ -70,10 +75,18 @@ export default function CategoriasPage() {
     }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm('Excluir esta categoria?')) return;
-    await fetch(`/api/categories/${id}`, { method: 'DELETE' });
-    load();
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    try {
+      const res = await fetch(`/api/categories/${deleteTarget.id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Não foi possível excluir.');
+      load();
+      showToast('success', 'Categoria excluída.');
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Não foi possível excluir.');
+    } finally {
+      setDeleteTarget(null);
+    }
   }
 
   if (loading) return <p className="text-muted">Carregando categorias…</p>;
@@ -105,7 +118,7 @@ export default function CategoriasPage() {
                 <button onClick={() => openEdit(c)} className="text-muted hover:text-accent transition-colors" aria-label="Editar">
                   <Pencil size={14} />
                 </button>
-                <button onClick={() => handleDelete(c.id)} className="text-muted hover:text-red transition-colors" aria-label="Excluir">
+                <button onClick={() => setDeleteTarget(c)} className="text-muted hover:text-red transition-colors" aria-label="Excluir">
                   <Trash2 size={14} />
                 </button>
               </div>
@@ -159,6 +172,15 @@ export default function CategoriasPage() {
             </div>
           </form>
         </Modal>
+      )}
+
+      {deleteTarget && (
+        <ConfirmDialog
+          title="Excluir categoria"
+          options={[{ label: 'Excluir', value: 'confirm', variant: 'danger' }]}
+          onSelect={confirmDelete}
+          onCancel={() => setDeleteTarget(null)}
+        />
       )}
     </div>
   );

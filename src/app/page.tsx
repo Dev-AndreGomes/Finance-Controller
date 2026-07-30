@@ -29,7 +29,7 @@ export default async function LandingPage() {
   return (
     <div className="min-h-screen bg-bg text-ink">
       <header className="max-w-6xl mx-auto px-6 py-6 flex items-center justify-between">
-        <p className="text-lg font-medium">Finance Controller</p>
+        <img src="./images/finance-controller-logo.png" alt="Finance Controller" className="h-20 w-auto" />
         <div className="flex items-center gap-4">
           <ThemeToggle />
           <Link href="/login" className="text-sm text-muted hover:text-ink transition-colors">

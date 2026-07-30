@@ -45,7 +45,7 @@ export function Sidebar({ userName, userEmail }: { userName: string; userEmail: 
       >
         <div className="px-6 py-7 border-b border-line flex items-center justify-between">
           <div>
-            <p className="text-xl font-medium tracking-tight">Finance Controller</p>
+            <img src="./images/finance-controller-logo.png" alt="Finance Controller"  />
             <p className="text-xs text-muted mt-0.5">Seu controle financeiro mensal</p>
           </div>
           <button onClick={() => setOpen(false)} className="md:hidden text-muted hover:text-ink">
