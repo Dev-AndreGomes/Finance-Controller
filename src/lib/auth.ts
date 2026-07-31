@@ -10,14 +10,13 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     minPasswordLength: 8,
-    // Log the user in immediately after registering — one less step for
-    // friends/family trying the app out.
+    // já loga a pessoa direto depois de criar a conta — um passo a menos
     autoSignIn: true,
   },
   session: {
-    expiresIn: 60 * 60 * 24 * 30, // 30 days
-    updateAge: 60 * 60 * 24, // refresh the cookie once a day of activity
+    expiresIn: 60 * 60 * 24 * 30, // 30 dias
+    updateAge: 60 * 60 * 24, // renova o cookie a cada dia de uso
   },
-  // Must be the last plugin — lets Server Actions/Route Handlers set cookies.
+  // tem que ser o último plugin — é ele que permite setar cookie em Server Action/Route Handler
   plugins: [nextCookies()],
 });

@@ -7,6 +7,11 @@ import { createTransactionSchema } from '@/lib/validation';
 import { badRequest, serverError, unauthorized } from '@/lib/api-utils';
 import { ensureFixedExpenseInstances } from '@/lib/fixed-expenses';
 
+// cartão de crédito nasce pendente (só quita na fatura); o resto já nasce pago
+function computeIsPaid(paymentMethod: string | undefined) {
+  return paymentMethod !== 'CREDIT_CARD';
+}
+
 export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUser();
@@ -16,9 +21,9 @@ export async function GET(request: NextRequest) {
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
 
-    // If the requested range is exactly one calendar month (how the Painel
-    // always calls this), make sure any active recurring fixed expense has
-    // a real row for it before we read the list back.
+    // Se o intervalo pedido for exatamente um mês (é assim que o Painel
+    // sempre chama isso), garante que as despesas fixas recorrentes ativas já
+    // estejam geradas antes de devolver a lista.
     if (startDate) {
       const start = new Date(startDate);
       await ensureFixedExpenseInstances(user.id, start.getUTCMonth() + 1, start.getUTCFullYear());
@@ -63,14 +68,16 @@ export async function POST(request: NextRequest) {
     if (isInstallmentPurchase) {
       const n = dto.installmentTotal!;
       const total = new Prisma.Decimal(dto.amount);
-      // Round each parcela down to cents, then dump the leftover cents (from
-      // rounding) onto the last parcela — so the parcelas always sum to
-      // exactly the total, never a cent more or less.
+      // Arredonda cada parcela pra baixo, e joga o restinho de centavos (do
+      // arredondamento) na última parcela — assim elas sempre somam
+      // exatamente o total, nunca um centavo a mais ou a menos.
       const base = total.dividedBy(n).toDecimalPlaces(2, Prisma.Decimal.ROUND_DOWN);
       const remainder = total.minus(base.times(n));
       const groupId = randomUUID();
       const firstDate = new Date(dto.date);
 
+      // Parcelamento é sempre tratado como pendente até ser pago — não
+      // importa a forma de pagamento escolhida (regra do enunciado).
       const rows = Array.from({ length: n }, (_, i) => {
         const amount = i === n - 1 ? base.plus(remainder) : base;
         const targetYear = firstDate.getUTCFullYear();
@@ -89,6 +96,8 @@ export async function POST(request: NextRequest) {
           installmentGroupId: groupId,
           installmentNumber: i + 1,
           installmentTotal: n,
+          paymentMethod: dto.paymentMethod ?? 'CREDIT_CARD',
+          isPaid: false,
         };
       });
 
@@ -111,6 +120,8 @@ export async function POST(request: NextRequest) {
         date: new Date(dto.date),
         categoryId: dto.categoryId ?? undefined,
         userId: user.id,
+        paymentMethod: dto.type === 'EXPENSE' ? dto.paymentMethod : undefined,
+        isPaid: dto.type === 'EXPENSE' ? computeIsPaid(dto.paymentMethod) : true,
       },
       include: { category: true },
     });

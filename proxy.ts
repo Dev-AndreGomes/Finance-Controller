@@ -11,8 +11,8 @@ export function proxy(request: NextRequest) {
   return NextResponse.next();
 }
 
-// Only guards the protected app pages. API routes and auth pages check
-// the real session themselves, and don't rely on this cookie-presence check.
+// Só protege as páginas do app — as rotas de API e as páginas de login
+// checam a sessão de verdade sozinhas.
 export const config = {
   matcher: ['/painel', '/historico', '/categorias'],
 };

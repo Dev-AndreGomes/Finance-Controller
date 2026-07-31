@@ -26,8 +26,8 @@ export async function GET(request: NextRequest) {
     const months: { month: number; year: number }[] = [];
     for (let i = monthsCount - 1; i >= 0; i--) {
       const d = new Date(Date.UTC(now.getFullYear(), now.getMonth() - i, 1));
-      // Never show a month before the account was created (there's no real
-      // data for it, so it would just show up as a confusing empty zero row).
+      // nunca mostra um mês anterior à criação da conta — não tem dado
+      // nenhum ali, só ia aparecer como uma linha zerada confusa
       if (d < firstMonthStart) continue;
       months.push({ month: d.getUTCMonth() + 1, year: d.getUTCFullYear() });
     }

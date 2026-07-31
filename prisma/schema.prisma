@@ -91,6 +91,16 @@ enum ExpenseSubtype {
   VARIABLE
 }
 
+// forma de pagamento — usada só em despesas (INCOME não precisa disso)
+enum PaymentMethod {
+  PIX
+  CREDIT_CARD
+  DEBIT_CARD
+  CASH
+  BOLETO
+  TRANSFER
+}
+
 model Category {
   id        String          @id @default(cuid())
   name      String
@@ -140,6 +150,13 @@ model Transaction {
   installmentNumber  Int?
   installmentTotal   Int?
 
+  // Forma de pagamento e status — só relevante pra despesas (EXPENSE).
+  // Regra automática: Pix/Débito/Dinheiro/Transferência já nasce pago;
+  // Cartão de Crédito nasce pendente (só quita quando a fatura fecha, ou a
+  // pessoa marca manualmente). Parcelas sempre nascem pendentes.
+  paymentMethod PaymentMethod?
+  isPaid        Boolean        @default(true)
+
   @@index([userId])
   @@index([categoryId])
   @@index([date])
@@ -170,18 +187,19 @@ model FixedExpenseSkip {
 // meses que ainda não foram gerados, e o histórico dos meses passados nunca
 // muda escondido.
 model FixedExpenseTemplate {
-  id          String   @id @default(cuid())
-  description String
-  amount      Decimal  @db.Decimal(14, 2)
+  id            String         @id @default(cuid())
+  description   String
+  amount        Decimal        @db.Decimal(14, 2)
   // dia do vencimento (1-31, ajustado pra baixo em meses mais curtos)
-  dayOfMonth  Int
-  startMonth  Int
-  startYear   Int
+  dayOfMonth    Int
+  startMonth    Int
+  startYear     Int
   // null = repete pra sempre, sem data de término
-  endMonth    Int?
-  endYear     Int?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  endMonth      Int?
+  endYear       Int?
+  paymentMethod PaymentMethod?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -193,9 +211,9 @@ model FixedExpenseTemplate {
   @@map("fixed_expense_template")
 }
 
-// One row per user per calendar month: the "Investir" simulation — what % of
-// that month's income the user plans to set aside, and whether they've
-// confirmed they actually did it.
+// Um registro por usuário por mês: a simulação de investimento (percentual
+// da receita que planeja guardar) e se a pessoa confirmou que investiu de
+// verdade naquele mês ou se é só a simulação.
 model MonthlyPlan {
   id               String   @id @default(cuid())
   month            Int

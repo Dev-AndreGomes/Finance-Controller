@@ -6,7 +6,6 @@ import { Modal, secondaryButtonClass } from './ui';
 export interface ConfirmOption {
   label: string;
   value: string;
-  /** 'danger' pinta de vermelho (ações destrutivas), 'default' usa o estilo neutro. */
   variant?: 'danger' | 'default';
 }
 
@@ -42,9 +41,7 @@ export function ConfirmDialog({
               key={opt.value}
               onClick={() => onSelect(opt.value)}
               className={`w-full text-left rounded-lg px-4 py-2.5 text-sm font-medium transition-colors ${
-                opt.variant === 'danger'
-                  ? 'bg-red/10 text-red hover:bg-red/20'
-                  : 'bg-surface-alt text-ink hover:bg-line'
+                opt.variant === 'danger' ? 'bg-red/10 text-red hover:bg-red/20' : 'bg-surface-alt text-ink hover:bg-line'
               }`}
             >
               {opt.label}

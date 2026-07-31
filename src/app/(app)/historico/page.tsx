@@ -22,10 +22,7 @@ export default function HistoricoPage() {
 
   if (loading) return <p className="text-muted">Carregando histórico…</p>;
 
-  const chartData = history.map((h) => ({
-    label: `${MONTH_SHORT[h.month - 1]}/${String(h.year).slice(2)}`,
-    saldo: h.balance,
-  }));
+  const chartData = history.map((h) => ({ label: `${MONTH_SHORT[h.month - 1]}/${String(h.year).slice(2)}`, saldo: h.balance }));
 
   const monthsWithData = history.filter((h) => h.totalIncome > 0 || h.totalExpenses > 0);
   const last = monthsWithData[monthsWithData.length - 1];
@@ -44,9 +41,7 @@ export default function HistoricoPage() {
           {delta >= 0 ? <TrendingUp size={20} className="text-green" /> : <TrendingDown size={20} className="text-red" />}
           <p className="text-sm">
             Seu saldo {delta >= 0 ? 'melhorou' : 'piorou'} em{' '}
-            <span className={`font-mono font-tabular ${delta >= 0 ? 'text-green' : 'text-red'}`}>
-              {formatCurrency(Math.abs(delta))}
-            </span>{' '}
+            <span className={`font-mono font-tabular ${delta >= 0 ? 'text-green' : 'text-red'}`}>{formatCurrency(Math.abs(delta))}</span>{' '}
             em relação ao mês anterior.
           </p>
         </Card>
@@ -62,12 +57,7 @@ export default function HistoricoPage() {
               <YAxis tick={{ fontSize: 12, fill: 'var(--color-muted)' }} axisLine={false} tickLine={false} width={40} />
               <Tooltip
                 formatter={(value: number) => formatCurrency(value)}
-                contentStyle={{
-                  background: 'var(--color-surface)',
-                  border: '1px solid var(--color-line)',
-                  color: 'var(--color-ink)',
-                  borderRadius: 8,
-                }}
+                contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-line)', color: 'var(--color-ink)', borderRadius: 8 }}
               />
               <Bar dataKey="saldo" radius={[6, 6, 0, 0]}>
                 {chartData.map((d, i) => (
@@ -91,25 +81,15 @@ export default function HistoricoPage() {
           .slice()
           .reverse()
           .map((h) => (
-            <div
-              key={`${h.month}-${h.year}`}
-              className="entry-row grid grid-cols-[1fr_1fr_1fr_1fr_auto] gap-2 px-4 sm:px-6 py-3 text-sm items-center"
-            >
+            <div key={`${h.month}-${h.year}`} className="entry-row grid grid-cols-[1fr_1fr_1fr_1fr_auto] gap-2 px-4 sm:px-6 py-3 text-sm items-center">
               <span>
                 {MONTH_SHORT[h.month - 1]}/{h.year}
               </span>
               <span className="text-right font-mono font-tabular text-green">{formatCurrency(h.totalIncome)}</span>
               <span className="text-right font-mono font-tabular text-red">{formatCurrency(h.totalExpenses)}</span>
-              <span className={`text-right font-mono font-tabular ${h.balance >= 0 ? '' : 'text-red'}`}>
-                {formatCurrency(h.balance)}
-              </span>
+              <span className={`text-right font-mono font-tabular ${h.balance >= 0 ? '' : 'text-red'}`}>{formatCurrency(h.balance)}</span>
               <span className="flex items-center justify-end gap-1 text-xs text-muted">
-                {h.invested > 0 &&
-                  (h.investConfirmed ? (
-                    <CheckCircle2 size={12} className="text-green" />
-                  ) : (
-                    <Circle size={12} />
-                  ))}
+                {h.invested > 0 && (h.investConfirmed ? <CheckCircle2 size={12} className="text-green" /> : <Circle size={12} />)}
                 {formatCurrency(h.invested)}
               </span>
             </div>

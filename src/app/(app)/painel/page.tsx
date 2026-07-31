@@ -4,14 +4,10 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
-  CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
-  Circle,
+  Bell,
   Clock,
   Eye,
   EyeOff,
-  Filter,
   Pencil,
   Plus,
   Repeat,
@@ -19,14 +15,17 @@ import {
   Trash2,
 } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
-import { Category, FixedExpenseTemplate, MonthlyPlan, Transaction } from '@/types';
+import { Category, FixedExpenseTemplate, MonthlyPlan, PaymentMethod, Transaction } from '@/types';
 import { Card, Modal, inputClass, primaryButtonClass, secondaryButtonClass } from '@/components/ui';
 import { ConfirmDialog, ConfirmOption } from '@/components/ConfirmDialog';
 import { AnimatedAmount } from '@/components/AnimatedAmount';
+import { PaymentStatusBadge } from '@/components/PaymentStatusBadge';
+import { MonthYearPicker } from '@/components/MonthYearPicker';
+import { AlertsPanel } from '@/components/AlertsPanel';
+import { ListFilters, ListFilterState, EMPTY_FILTERS } from '@/components/ListFilters';
 import { useToast } from '@/context/ToastContext';
 import { formatCurrency, formatDate, MONTH_NAMES } from '@/lib/format';
-import { AlertsPanel } from '@/components/AlertsPanel';
-import { MonthYearPicker } from '@/components/MonthYearPicker';
+import { PAYMENT_METHOD_LABELS, PAYMENT_METHOD_OPTIONS, paymentMethodStartsAsPaid } from '@/lib/payment-methods';
 
 type Tab = 'INCOME' | 'FIXED' | 'VARIABLE';
 
@@ -67,14 +66,14 @@ export default function PainelPage() {
   const [showNewFixedModal, setShowNewFixedModal] = useState(false);
   const [showManageFixedModal, setShowManageFixedModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Transaction | null>(null);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [filters, setFilters] = useState<ListFilterState>(EMPTY_FILTERS);
 
   async function load() {
     const { start, end } = monthRange(month, year);
     const [catRes, txRes, planRes] = await Promise.all([
       fetch('/api/categories').then((r) => r.json()),
-      fetch(`/api/transactions?startDate=${start.toISOString()}&endDate=${end.toISOString()}`).then((r) =>
-        r.json(),
-      ),
+      fetch(`/api/transactions?startDate=${start.toISOString()}&endDate=${end.toISOString()}`).then((r) => r.json()),
       fetch(`/api/plans?month=${month}&year=${year}`).then((r) => r.json()),
     ]);
     setCategories(catRes);
@@ -89,32 +88,9 @@ export default function PainelPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [month, year]);
 
-  function goToPreviousMonth() {
-    if (month === 1) {
-      setMonth(12);
-      setYear((y) => y - 1);
-    } else {
-      setMonth((m) => m - 1);
-    }
-  }
-  function goToNextMonth() {
-    if (month === 12) {
-      setMonth(1);
-      setYear((y) => y + 1);
-    } else {
-      setMonth((m) => m + 1);
-    }
-  }
-
   const incomeList = useMemo(() => transactions.filter((t) => t.type === 'INCOME'), [transactions]);
-  const fixedList = useMemo(
-    () => transactions.filter((t) => t.type === 'EXPENSE' && t.subtype === 'FIXED'),
-    [transactions],
-  );
-  const variableList = useMemo(
-    () => transactions.filter((t) => t.type === 'EXPENSE' && t.subtype !== 'FIXED'),
-    [transactions],
-  );
+  const fixedList = useMemo(() => transactions.filter((t) => t.type === 'EXPENSE' && t.subtype === 'FIXED'), [transactions]);
+  const variableList = useMemo(() => transactions.filter((t) => t.type === 'EXPENSE' && t.subtype !== 'FIXED'), [transactions]);
 
   const totalIncome = incomeList.reduce((sum, t) => sum + parseFloat(t.amount), 0);
   const totalFixed = fixedList.reduce((sum, t) => sum + parseFloat(t.amount), 0);
@@ -123,26 +99,33 @@ export default function PainelPage() {
   const investedAmount = (totalIncome * plan.investPercentage) / 100;
   const balance = totalIncome - totalExpenses - investedAmount;
 
-  const listByTab: Record<Tab, Transaction[]> = {
-    INCOME: incomeList,
-    FIXED: fixedList,
-    VARIABLE: variableList,
-  };
+  const listByTab: Record<Tab, Transaction[]> = { INCOME: incomeList, FIXED: fixedList, VARIABLE: variableList };
   const activeList = listByTab[activeTab];
+
+  // O filtro só afeta o que aparece na lista/gráfico — os cards de resumo
+  // (Receita/Despesas/Saldo) continuam mostrando o mês inteiro, sem filtro.
+  const filteredList = useMemo(() => {
+    return activeList.filter((t) => {
+      if (filters.categoryId && t.categoryId !== filters.categoryId) return false;
+      if (filters.paymentMethod && t.paymentMethod !== filters.paymentMethod) return false;
+      if (filters.status === 'PAID' && !t.isPaid) return false;
+      if (filters.status === 'PENDING' && t.isPaid) return false;
+      return true;
+    });
+  }, [activeList, filters]);
 
   const donutData = useMemo(() => {
     const groups = new Map<string, { value: number; color: string }>();
-    for (const t of activeList) {
+    for (const t of filteredList) {
       const label = activeTab === 'FIXED' ? t.description : t.category?.name ?? 'Sem categoria';
       // usa a cor de verdade que a pessoa escolheu na categoria — sem
-      // categoria (ou aba de despesa fixa, que não tem categoria) cai num
-      // cinza neutro em vez de pegar uma cor aleatória da paleta
+      // categoria (ou despesa fixa, que não tem categoria) cai num cinza neutro
       const color = activeTab === 'FIXED' ? 'var(--color-muted)' : t.category?.color ?? 'var(--color-muted)';
       const existing = groups.get(label);
       groups.set(label, { value: (existing?.value ?? 0) + parseFloat(t.amount), color });
     }
     return Array.from(groups.entries()).map(([name, { value, color }]) => ({ name, value, color }));
-  }, [activeList, activeTab]);
+  }, [filteredList, activeTab]);
 
   // Monta as opções do modal de confirmação conforme o tipo do lançamento:
   // despesa fixa recorrente e parcela têm a mesma dúvida ("só esse aqui ou
@@ -177,6 +160,21 @@ export default function PainelPage() {
     }
   }
 
+  async function handleTogglePaid(tx: Transaction) {
+    try {
+      const res = await fetch(`/api/transactions/${tx.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isPaid: !tx.isPaid }),
+      });
+      if (!res.ok) throw new Error('Não foi possível atualizar.');
+      showToast('success', !tx.isPaid ? 'Marcado como pago!' : 'Marcado como pendente.');
+      load();
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Não foi possível atualizar.');
+    }
+  }
+
   if (loading) return <p className="text-muted">Carregando painel…</p>;
 
   return (
@@ -196,21 +194,32 @@ export default function PainelPage() {
           <p className="text-sm text-muted mt-1">Seu resumo financeiro do mês</p>
         </div>
 
-        <div className="flex items-center gap-1 bg-surface border border-line rounded-lg px-1 py-1">
-          <button onClick={goToPreviousMonth} className="text-muted hover:text-ink p-1.5" aria-label="Mês anterior">
-            <ChevronLeft size={16} />
-          </button>
-          <MonthYearPicker
-            month={month}
-            year={year}
-            onChange={(m, y) => {
-              setMonth(m);
-              setYear(y);
-            }}
-          />
-          <button onClick={goToNextMonth} className="text-muted hover:text-ink p-1.5" aria-label="Próximo mês">
-            <ChevronRight size={16} />
-          </button>
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <button
+              onClick={() => setShowNotifications((v) => !v)}
+              className="text-muted hover:text-ink transition-colors"
+              aria-label="Notificações"
+            >
+              <Bell size={18} />
+            </button>
+            {showNotifications && (
+              <div className="absolute right-0 mt-2 w-56 bg-surface border border-line rounded-lg shadow-[var(--shadow-card)] p-4 z-10 text-xs text-muted">
+                Nenhuma notificação nova.
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1 bg-surface border border-line rounded-lg px-1 py-1">
+            <MonthYearPicker
+              month={month}
+              year={year}
+              onChange={(m, y) => {
+                setMonth(m);
+                setYear(y);
+              }}
+            />
+          </div>
         </div>
       </header>
 
@@ -219,11 +228,7 @@ export default function PainelPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <p className="text-xs uppercase tracking-wide text-muted">Receita</p>
-          <AnimatedAmount
-            value={totalIncome}
-            hidden={hideValues}
-            className="block font-mono text-xl mt-2 font-tabular text-green"
-          />
+          <AnimatedAmount value={totalIncome} hidden={hideValues} className="block font-mono text-xl mt-2 font-tabular text-green" />
         </Card>
         <Card>
           <div className="flex items-center justify-between flex-wrap gap-1">
@@ -235,29 +240,14 @@ export default function PainelPage() {
               <Settings2 size={10} /> Ajustar
             </button>
           </div>
-          <AnimatedAmount
-            value={investedAmount}
-            hidden={hideValues}
-            className="block font-mono text-xl mt-2 font-tabular text-accent"
-          />
-          <div className="flex items-center gap-1 mt-1">
-            {plan.confirmed ? (
-              <CheckCircle2 size={12} className="text-green" />
-            ) : (
-              <Circle size={12} className="text-muted" />
-            )}
-            <p className="text-[11px] text-muted">
-              {plan.investPercentage}% da receita · {plan.confirmed ? 'confirmado' : 'simulação'}
-            </p>
-          </div>
+          <AnimatedAmount value={investedAmount} hidden={hideValues} className="block font-mono text-xl mt-2 font-tabular text-accent" />
+          <p className="text-[11px] text-muted mt-1">
+            {plan.investPercentage}% da receita · {plan.confirmed ? 'confirmado' : 'simulação'}
+          </p>
         </Card>
         <Card>
           <p className="text-xs uppercase tracking-wide text-muted">Despesas</p>
-          <AnimatedAmount
-            value={totalExpenses}
-            hidden={hideValues}
-            className="block font-mono text-xl mt-2 font-tabular text-red"
-          />
+          <AnimatedAmount value={totalExpenses} hidden={hideValues} className="block font-mono text-xl mt-2 font-tabular text-red" />
         </Card>
         <Card>
           <p className="text-xs uppercase tracking-wide text-muted">Saldo</p>
@@ -269,7 +259,10 @@ export default function PainelPage() {
         {(Object.keys(TAB_CONFIG) as Tab[]).map((tab) => (
           <button
             key={tab}
-            onClick={() => setActiveTab(tab)}
+            onClick={() => {
+              setActiveTab(tab);
+              setFilters(EMPTY_FILTERS);
+            }}
             className={`px-4 py-2.5 text-sm border-b-2 -mb-px whitespace-nowrap transition-colors ${
               activeTab === tab ? 'border-accent text-ink' : 'border-transparent text-muted hover:text-ink'
             }`}
@@ -279,91 +272,117 @@ export default function PainelPage() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
         <Card className="lg:col-span-3 p-0 overflow-hidden">
           <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-line">
             <p className="text-sm font-medium">
               {activeTab === 'INCOME' ? 'Receitas' : activeTab === 'FIXED' ? 'Despesas fixas' : 'Despesas variáveis'}
             </p>
-            <button
-              onClick={() => {
-                if (activeTab === 'FIXED') {
-                  setShowNewFixedModal(true);
-                } else {
-                  setEditingTransaction(null);
-                  setShowAddModal(true);
-                }
-              }}
-              className={`${primaryButtonClass} !py-1.5 !px-3 text-xs`}
-            >
-              <Plus size={13} /> Adicionar
-            </button>
+            <div className="flex items-center gap-2">
+              <ListFilters
+                categories={categories.filter((c) => (activeTab === 'INCOME' ? c.kind === 'INCOME' : c.kind === 'EXPENSE'))}
+                showCategoryFilter={activeTab !== 'FIXED'}
+                showPaymentFilters={activeTab !== 'INCOME'}
+                value={filters}
+                onChange={setFilters}
+              />
+              <button
+                onClick={() => {
+                  if (activeTab === 'FIXED') {
+                    setShowNewFixedModal(true);
+                  } else {
+                    setEditingTransaction(null);
+                    setShowAddModal(true);
+                  }
+                }}
+                className={`${primaryButtonClass} !py-1.5 !px-3 text-xs`}
+              >
+                <Plus size={13} /> Adicionar
+              </button>
+            </div>
           </div>
 
-          {activeList.length === 0 ? (
-            <p className="text-muted text-sm p-6">{TAB_CONFIG[activeTab].empty}</p>
-          ) : (
-            <AnimatePresence initial={false}>
-              {activeList.map((tx) => (
-                <motion.div
-                  key={tx.id}
-                  initial={{ opacity: 0, y: -18 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.35, ease: 'easeOut' }}
-                  className="entry-row flex items-center justify-between gap-3 px-4 sm:px-6 py-3"
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm truncate flex items-center gap-2">
-                      {tx.description}
-                      {tx.installmentTotal && (
-                        <span className="text-[10px] uppercase tracking-wide bg-accent/10 text-accent rounded-full px-1.5 py-0.5 shrink-0">
-                          Parcela {tx.installmentNumber}/{tx.installmentTotal}
-                        </span>
-                      )}
-                    </p>
-                    <p className="text-xs text-muted mt-0.5 truncate">
-                      {formatDate(tx.date)}
-                      {tx.category ? ` · ${tx.category.name}` : ''}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    <span
-                      className={`font-mono text-sm font-tabular whitespace-nowrap ${
-                        activeTab === 'INCOME' ? 'text-green' : 'text-red'
-                      }`}
-                    >
-                      {hideValues ? '••••••' : formatCurrency(tx.amount)}
-                    </span>
-                    <button
-                      onClick={() => {
-                        setEditingTransaction(tx);
-                        setShowAddModal(true);
-                      }}
-                      className="text-muted hover:text-accent transition-colors"
-                      aria-label="Editar"
-                    >
-                      <Pencil size={14} />
-                    </button>
-                    <button
-                      onClick={() => setDeleteTarget(tx)}
-                      className="text-muted hover:text-red transition-colors"
-                      aria-label="Excluir"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          )}
+          {/* lista com altura máxima e rolagem própria — assim, mesmo com
+              muitos lançamentos, o gráfico ao lado não fica lá embaixo */}
+          <div className="max-h-[30rem] overflow-y-auto">
+            {filteredList.length === 0 ? (
+              <p className="text-muted text-sm p-6">
+                {activeList.length === 0 ? TAB_CONFIG[activeTab].empty : 'Nenhum lançamento bate com esse filtro.'}
+              </p>
+            ) : (
+              <AnimatePresence initial={false}>
+                {filteredList.map((tx) => (
+                  <motion.div
+                    key={tx.id}
+                    initial={{ opacity: 0, y: -18 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.35, ease: 'easeOut' }}
+                    className="entry-row flex items-center justify-between gap-3 px-4 sm:px-6 py-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm truncate flex items-center gap-2 flex-wrap">
+                        {tx.description}
+                        {tx.installmentTotal && (
+                          <span className="text-[10px] uppercase tracking-wide bg-accent/10 text-accent rounded-full px-1.5 py-0.5 shrink-0">
+                            Parcela {tx.installmentNumber}/{tx.installmentTotal}
+                          </span>
+                        )}
+                        {tx.type === 'EXPENSE' && (
+                          <PaymentStatusBadge
+                            isPaid={tx.isPaid}
+                            onTogglePaid={tx.paymentMethod === 'CREDIT_CARD' ? () => handleTogglePaid(tx) : undefined}
+                          />
+                        )}
+                      </p>
+                      <p className="text-xs text-muted mt-0.5 truncate">
+                        {formatDate(tx.date)}
+                        {tx.category ? ` · ${tx.category.name}` : ''}
+                        {tx.paymentMethod ? ` · ${PAYMENT_METHOD_LABELS[tx.paymentMethod]}` : ''}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span
+                        className={`font-mono text-sm font-tabular whitespace-nowrap ${
+                          activeTab === 'INCOME' ? 'text-green' : 'text-red'
+                        }`}
+                      >
+                        {hideValues ? '••••••' : formatCurrency(tx.amount)}
+                      </span>
+                      <button
+                        onClick={() => {
+                          setEditingTransaction(tx);
+                          setShowAddModal(true);
+                        }}
+                        className="text-muted hover:text-accent transition-colors"
+                        aria-label="Editar"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      <button
+                        onClick={() => setDeleteTarget(tx)}
+                        className="text-muted hover:text-red transition-colors"
+                        aria-label="Excluir"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            )}
+          </div>
         </Card>
 
-        <Card className="lg:col-span-2 flex flex-col items-center justify-center min-h-[280px]">
+        {/* sticky: fica fixo na tela enquanto rola a lista ao lado, não
+            precisa mais descer a página pra ver o gráfico */}
+        <Card className="lg:col-span-2 flex flex-col items-center justify-center min-h-[280px] lg:sticky lg:top-6">
           {donutData.length === 0 ? (
             <div className="text-center text-muted">
               <Clock size={28} className="mx-auto mb-3 opacity-60" />
-              <p className="text-sm">{TAB_CONFIG[activeTab].empty}</p>
+              <p className="text-sm">
+                {activeList.length === 0 ? TAB_CONFIG[activeTab].empty : 'Nenhum lançamento bate com esse filtro.'}
+              </p>
             </div>
           ) : (
             <>
@@ -401,10 +420,7 @@ export default function PainelPage() {
             <Settings2 size={12} /> Gerenciar categorias
           </Link>
           {activeTab === 'FIXED' && (
-            <button
-              onClick={() => setShowManageFixedModal(true)}
-              className="text-xs text-accent hover:underline mt-2 flex items-center gap-1"
-            >
+            <button onClick={() => setShowManageFixedModal(true)} className="text-xs text-accent hover:underline mt-2 flex items-center gap-1">
               <Repeat size={12} /> Gerenciar despesas fixas recorrentes
             </button>
           )}
@@ -466,6 +482,8 @@ export default function PainelPage() {
         />
       )}
 
+      {showManageFixedModal && <ManageFixedTemplatesModal onClose={() => setShowManageFixedModal(false)} onChanged={load} />}
+
       {deleteTarget && (
         <ConfirmDialog
           title="Excluir lançamento"
@@ -479,8 +497,6 @@ export default function PainelPage() {
           onCancel={() => setDeleteTarget(null)}
         />
       )}
-
-      {showManageFixedModal && <ManageFixedTemplatesModal onClose={() => setShowManageFixedModal(false)} onChanged={load} />}
     </div>
   );
 }
@@ -502,10 +518,9 @@ function AddTransactionModal({
 }) {
   const [description, setDescription] = useState(editingTransaction?.description ?? '');
   const [amount, setAmount] = useState(editingTransaction?.amount ?? '');
-  const [txDate, setTxDate] = useState(
-    editingTransaction ? editingTransaction.date.slice(0, 10) : date.toISOString().slice(0, 10),
-  );
+  const [txDate, setTxDate] = useState(editingTransaction ? editingTransaction.date.slice(0, 10) : date.toISOString().slice(0, 10));
   const [categoryId, setCategoryId] = useState(editingTransaction?.categoryId ?? '');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | ''>(editingTransaction?.paymentMethod ?? 'PIX');
   const [isInstallment, setIsInstallment] = useState(false);
   const [installmentTotal, setInstallmentTotal] = useState('2');
   const [error, setError] = useState<string | null>(null);
@@ -513,6 +528,7 @@ function AddTransactionModal({
 
   const relevantCategories = categories.filter((c) => (tab === 'INCOME' ? c.kind === 'INCOME' : c.kind === 'EXPENSE'));
   const canInstallment = tab === 'VARIABLE' && !editingTransaction;
+  const showPaymentFields = tab !== 'INCOME' && !(canInstallment && isInstallment);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -528,23 +544,21 @@ function AddTransactionModal({
         categoryId: tab === 'FIXED' ? undefined : categoryId || undefined,
         isInstallment: canInstallment ? isInstallment : undefined,
         installmentTotal: canInstallment && isInstallment ? parseInt(installmentTotal, 10) : undefined,
+        paymentMethod: tab !== 'INCOME' && paymentMethod ? paymentMethod : undefined,
       };
 
-      const res = await fetch(
-        editingTransaction ? `/api/transactions/${editingTransaction.id}` : '/api/transactions',
-        {
-          method: editingTransaction ? 'PATCH' : 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        },
-      );
+      const res = await fetch(editingTransaction ? `/api/transactions/${editingTransaction.id}` : '/api/transactions', {
+        method: editingTransaction ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.message ?? 'Não foi possível salvar.');
       }
       const saved = await res.json();
-      // Installment purchases return an array (one row per parcela) — use
-      // the first parcela just to figure out which month to jump to.
+      // Compra parcelada devolve uma lista (uma linha por parcela) — usa a
+      // primeira só pra descobrir pra qual mês pular.
       onSaved(Array.isArray(saved) ? saved[0] : saved);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Não foi possível salvar.');
@@ -589,25 +603,14 @@ function AddTransactionModal({
             <label className="text-xs text-muted uppercase tracking-wide">
               {tab === 'FIXED' ? 'Vencimento' : canInstallment && isInstallment ? 'Data da 1ª parcela' : 'Data'}
             </label>
-            <input
-              type="date"
-              required
-              value={txDate}
-              onChange={(e) => setTxDate(e.target.value)}
-              className={`${inputClass} mt-1`}
-            />
+            <input type="date" required value={txDate} onChange={(e) => setTxDate(e.target.value)} className={`${inputClass} mt-1`} />
           </div>
         </div>
 
         {canInstallment && (
           <>
             <label className="flex items-center gap-2 text-sm bg-surface-alt rounded-lg px-3 py-2.5">
-              <input
-                type="checkbox"
-                checked={isInstallment}
-                onChange={(e) => setIsInstallment(e.target.checked)}
-                className="accent-accent"
-              />
+              <input type="checkbox" checked={isInstallment} onChange={(e) => setIsInstallment(e.target.checked)} className="accent-accent" />
               É parcelado?
             </label>
             {isInstallment && (
@@ -631,18 +634,49 @@ function AddTransactionModal({
                     })}
                   </p>
                 )}
+                <p className="text-[11px] text-muted mt-1">Parcelamento é sempre no cartão de crédito e nasce pendente.</p>
               </div>
             )}
           </>
         )}
 
-        {tab !== 'FIXED' && (
+        {showPaymentFields && (
           <div>
-            <label className="text-xs text-muted uppercase tracking-wide">
-              {tab === 'INCOME' ? 'Tipo de renda' : 'Categoria'}
-            </label>
+            <label className="text-xs text-muted uppercase tracking-wide">Forma de pagamento</label>
+            <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)} className={`${inputClass} mt-1`}>
+              {PAYMENT_METHOD_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-[11px] text-muted mt-1">
+              {paymentMethodStartsAsPaid(paymentMethod)
+                ? 'Vai entrar como pago automaticamente.'
+                : 'Vai entrar como pendente — só quita quando a fatura fechar (ou marque como pago na lista).'}
+            </p>
+          </div>
+        )}
+
+        {tab === 'INCOME' && (
+          <div>
+            <label className="text-xs text-muted uppercase tracking-wide">Tipo de renda</label>
             <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={`${inputClass} mt-1`}>
-              <option value="">Sem categoria</option>
+              <option value="">Selecione…</option>
+              {relevantCategories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {tab === 'VARIABLE' && (
+          <div>
+            <label className="text-xs text-muted uppercase tracking-wide">Categoria</label>
+            <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={`${inputClass} mt-1`}>
+              <option value="">Selecione…</option>
               {relevantCategories.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -679,6 +713,7 @@ function NewFixedExpenseModal({
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [dayOfMonth, setDayOfMonth] = useState('10');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('PIX');
   const [repeats, setRepeats] = useState(true);
   const [hasEnd, setHasEnd] = useState(false);
   const [endMonth, setEndMonth] = useState(month);
@@ -703,6 +738,7 @@ function NewFixedExpenseModal({
           repeats,
           endMonth: repeats && hasEnd ? endMonth : null,
           endYear: repeats && hasEnd ? endYear : null,
+          paymentMethod,
         }),
       });
       if (!res.ok) {
@@ -749,41 +785,35 @@ function NewFixedExpenseModal({
           </div>
           <div>
             <label className="text-xs text-muted uppercase tracking-wide">Dia do vencimento</label>
-            <input
-              type="number"
-              min={1}
-              max={31}
-              required
-              value={dayOfMonth}
-              onChange={(e) => setDayOfMonth(e.target.value)}
-              className={`${inputClass} mt-1`}
-            />
+            <input type="number" min={1} max={31} required value={dayOfMonth} onChange={(e) => setDayOfMonth(e.target.value)} className={`${inputClass} mt-1`} />
           </div>
         </div>
 
-        <p className="text-[11px] text-muted">
-          Vai valer a partir de {MONTH_NAMES[month - 1]} de {year}.
-        </p>
+        <div>
+          <label className="text-xs text-muted uppercase tracking-wide">Forma de pagamento</label>
+          <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)} className={`${inputClass} mt-1`}>
+            {PAYMENT_METHOD_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          <p className="text-[11px] text-muted mt-1">
+            {paymentMethodStartsAsPaid(paymentMethod) ? 'Cada mês já entra pago automaticamente.' : 'Cada mês entra pendente até você marcar como pago.'}
+          </p>
+        </div>
+
+        <p className="text-[11px] text-muted">Vai valer a partir de {MONTH_NAMES[month - 1]} de {year}.</p>
 
         <label className="flex items-center gap-2 text-sm bg-surface-alt rounded-lg px-3 py-2.5">
-          <input
-            type="checkbox"
-            checked={repeats}
-            onChange={(e) => setRepeats(e.target.checked)}
-            className="accent-accent"
-          />
+          <input type="checkbox" checked={repeats} onChange={(e) => setRepeats(e.target.checked)} className="accent-accent" />
           Repetir todo mês
         </label>
 
         {repeats && (
           <div className="space-y-2">
             <label className="flex items-center gap-2 text-sm">
-              <input
-                type="radio"
-                checked={!hasEnd}
-                onChange={() => setHasEnd(false)}
-                className="accent-accent"
-              />
+              <input type="radio" checked={!hasEnd} onChange={() => setHasEnd(false)} className="accent-accent" />
               Sem data de término
             </label>
             <label className="flex items-center gap-2 text-sm">
@@ -792,23 +822,14 @@ function NewFixedExpenseModal({
             </label>
             {hasEnd && (
               <div className="grid grid-cols-2 gap-3 pl-6">
-                <select
-                  value={endMonth}
-                  onChange={(e) => setEndMonth(parseInt(e.target.value, 10))}
-                  className={inputClass}
-                >
+                <select value={endMonth} onChange={(e) => setEndMonth(parseInt(e.target.value, 10))} className={inputClass}>
                   {MONTH_NAMES.map((name, i) => (
                     <option key={name} value={i + 1}>
                       {name}
                     </option>
                   ))}
                 </select>
-                <input
-                  type="number"
-                  value={endYear}
-                  onChange={(e) => setEndYear(parseInt(e.target.value, 10))}
-                  className={inputClass}
-                />
+                <input type="number" value={endYear} onChange={(e) => setEndYear(parseInt(e.target.value, 10))} className={inputClass} />
               </div>
             )}
           </div>
@@ -831,9 +852,7 @@ function ManageFixedTemplatesModal({ onClose, onChanged }: { onClose: () => void
   const showToast = useToast();
   const [templates, setTemplates] = useState<FixedExpenseTemplate[]>([]);
   const [loading, setLoading] = useState(true);
-  const [pendingAction, setPendingAction] = useState<{ template: FixedExpenseTemplate; kind: 'stop' | 'delete' } | null>(
-    null,
-  );
+  const [pendingAction, setPendingAction] = useState<{ template: FixedExpenseTemplate; kind: 'stop' | 'delete' } | null>(null);
 
   async function load() {
     const res = await fetch('/api/fixed-expense-templates');
@@ -887,22 +906,16 @@ function ManageFixedTemplatesModal({ onClose, onChanged }: { onClose: () => void
                     <p className="text-sm">{t.description}</p>
                     <p className="text-xs text-muted mt-0.5">
                       {formatCurrency(t.amount)} · todo dia {t.dayOfMonth}
+                      {t.paymentMethod ? ` · ${PAYMENT_METHOD_LABELS[t.paymentMethod]}` : ''}
                       {isEnded ? ` · até ${MONTH_NAMES[t.endMonth! - 1]}/${t.endYear}` : ' · sem data de término'}
                     </p>
                   </div>
-                  <button
-                    onClick={() => setPendingAction({ template: t, kind: 'delete' })}
-                    className="text-muted hover:text-red transition-colors"
-                    aria-label="Excluir"
-                  >
+                  <button onClick={() => setPendingAction({ template: t, kind: 'delete' })} className="text-muted hover:text-red transition-colors" aria-label="Excluir">
                     <Trash2 size={14} />
                   </button>
                 </div>
                 {!isEnded && (
-                  <button
-                    onClick={() => setPendingAction({ template: t, kind: 'stop' })}
-                    className="text-xs text-accent hover:underline mt-2"
-                  >
+                  <button onClick={() => setPendingAction({ template: t, kind: 'stop' })} className="text-xs text-accent hover:underline mt-2">
                     Parar de repetir a partir de agora
                   </button>
                 )}
@@ -925,14 +938,13 @@ function ManageFixedTemplatesModal({ onClose, onChanged }: { onClose: () => void
               ? `"${pendingAction.template.description}" vai parar de aparecer a partir de agora. Os meses já lançados continuam intactos.`
               : `Excluir "${pendingAction.template.description}"? Os meses já lançados continuam no histórico, só para de gerar novos.`
           }
-          options={[
-            { label: pendingAction.kind === 'stop' ? 'Parar de repetir' : 'Excluir', value: 'confirm', variant: 'danger' },
-          ]}
+          options={[{ label: pendingAction.kind === 'stop' ? 'Parar de repetir' : 'Excluir', value: 'confirm', variant: 'danger' }]}
           onSelect={confirmAction}
           onCancel={() => setPendingAction(null)}
         />
       )}
-    </Modal>  );
+    </Modal>
+  );
 }
 
 function InvestModal({
@@ -990,14 +1002,7 @@ function InvestModal({
       {error && <p className="text-red text-sm mb-2">{error}</p>}
 
       <p className="text-center font-mono text-2xl text-accent">{Math.round(percentage)}%</p>
-      <input
-        type="range"
-        min={0}
-        max={100}
-        value={percentage}
-        onChange={(e) => setPercentage(parseFloat(e.target.value))}
-        className="w-full mt-3 accent-accent"
-      />
+      <input type="range" min={0} max={100} value={percentage} onChange={(e) => setPercentage(parseFloat(e.target.value))} className="w-full mt-3 accent-accent" />
 
       <div className="flex gap-2 mt-4">
         {INVEST_PRESETS.map((p) => (
@@ -1005,9 +1010,7 @@ function InvestModal({
             key={p}
             onClick={() => setPercentage(p)}
             className={`flex-1 text-sm py-1.5 rounded-lg border transition-colors ${
-              Math.round(percentage) === p
-                ? 'bg-accent text-accent-contrast border-accent'
-                : 'border-line text-muted hover:text-ink'
+              Math.round(percentage) === p ? 'bg-accent text-accent-contrast border-accent' : 'border-line text-muted hover:text-ink'
             }`}
           >
             {p}%
@@ -1025,18 +1028,11 @@ function InvestModal({
           className={`${inputClass} mt-1 text-center font-mono text-lg`}
           disabled={totalIncome === 0}
         />
-        <p className="text-[11px] text-muted mt-1 text-center">
-          Toque no valor pra digitar. O percentual se ajusta sozinho.
-        </p>
+        <p className="text-[11px] text-muted mt-1 text-center">Toque no valor pra digitar. O percentual se ajusta sozinho.</p>
       </div>
 
       <label className="flex items-center gap-2 text-sm mt-5 bg-surface-alt rounded-lg px-3 py-2.5">
-        <input
-          type="checkbox"
-          checked={confirmed}
-          onChange={(e) => setConfirmed(e.target.checked)}
-          className="accent-accent"
-        />
+        <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} className="accent-accent" />
         Já investi esse valor esse mês
       </label>
 

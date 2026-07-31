@@ -8,7 +8,7 @@ export function ThemeToggle() {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
-  // Avoid a hydration mismatch: the server doesn't know the persisted theme.
+  // evita descompasso de hidratação: o servidor não sabe qual tema tava salvo
   useEffect(() => setMounted(true), []);
   if (!mounted) return <div className="w-11 h-6" />;
 
@@ -25,11 +25,7 @@ export function ThemeToggle() {
           isDark ? 'translate-x-5' : 'translate-x-0'
         }`}
       >
-        {isDark ? (
-          <Moon size={11} className="text-accent-contrast" />
-        ) : (
-          <Sun size={11} className="text-accent-contrast" />
-        )}
+        {isDark ? <Moon size={11} className="text-accent-contrast" /> : <Sun size={11} className="text-accent-contrast" />}
       </span>
     </button>
   );

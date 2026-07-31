@@ -28,6 +28,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         dayOfMonth: dto.dayOfMonth ?? undefined,
         endMonth: dto.endMonth === undefined ? undefined : dto.endMonth,
         endYear: dto.endYear === undefined ? undefined : dto.endYear,
+        paymentMethod: dto.paymentMethod ?? undefined,
       },
     });
 
@@ -46,9 +47,8 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
     const existing = await prisma.fixedExpenseTemplate.findUnique({ where: { id } });
     if (!existing || existing.userId !== user.id) return notFound('Despesa fixa não encontrada');
 
-    // Deleting the template only stops future recurrence — already
-    // materialized Transaction rows are independent and remain untouched
-    // (their `templateId` gets nulled out by the schema's onDelete: SetNull).
+    // Isso só para de gerar novas — as Transactions já materializadas
+    // continuam (viram órfãs, templateId some por causa do onDelete: SetNull).
     await prisma.fixedExpenseTemplate.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (error) {

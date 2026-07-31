@@ -1,5 +1,6 @@
 export type TransactionType = 'INCOME' | 'EXPENSE';
 export type ExpenseSubtype = 'FIXED' | 'VARIABLE';
+export type PaymentMethod = 'PIX' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'CASH' | 'BOLETO' | 'TRANSFER';
 
 export interface Category {
   id: string;
@@ -21,6 +22,8 @@ export interface Transaction {
   installmentGroupId: string | null;
   installmentNumber: number | null;
   installmentTotal: number | null;
+  paymentMethod: PaymentMethod | null;
+  isPaid: boolean;
 }
 
 export interface FixedExpenseTemplate {
@@ -32,6 +35,7 @@ export interface FixedExpenseTemplate {
   startYear: number;
   endMonth: number | null;
   endYear: number | null;
+  paymentMethod: PaymentMethod | null;
 }
 
 export interface MonthlyPlan {

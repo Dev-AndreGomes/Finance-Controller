@@ -54,16 +54,10 @@ export default async function LandingPage() {
             o que precisa pagar, e quanto sobra — do jeito que faria numa planilha, mas com menos trabalho.
           </p>
           <div className="flex items-center gap-3 mt-8">
-            <Link
-              href="/registro"
-              className="bg-accent text-accent-contrast rounded-lg px-6 py-3 font-medium hover:brightness-110 transition-all"
-            >
+            <Link href="/registro" className="bg-accent text-accent-contrast rounded-lg px-6 py-3 font-medium hover:brightness-110 transition-all">
               Começar de graça
             </Link>
-            <Link
-              href="/login"
-              className="border border-line rounded-lg px-6 py-3 font-medium hover:bg-surface-alt transition-colors"
-            >
+            <Link href="/login" className="border border-line rounded-lg px-6 py-3 font-medium hover:bg-surface-alt transition-colors">
               Já tenho conta
             </Link>
           </div>

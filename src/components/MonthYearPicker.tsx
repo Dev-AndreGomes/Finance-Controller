@@ -17,7 +17,6 @@ export function MonthYearPicker({
   const [pickerYear, setPickerYear] = useState(year);
   const ref = useRef<HTMLDivElement>(null);
 
-  // fecha o popover se clicar fora
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
@@ -44,19 +43,11 @@ export function MonthYearPicker({
       {open && (
         <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-surface border border-line rounded-xl shadow-[var(--shadow-card)] p-3 z-20 w-64">
           <div className="flex items-center justify-between mb-2">
-            <button
-              onClick={() => setPickerYear((y) => y - 1)}
-              className="text-muted hover:text-ink p-1"
-              aria-label="Ano anterior"
-            >
+            <button onClick={() => setPickerYear((y) => y - 1)} className="text-muted hover:text-ink p-1" aria-label="Ano anterior">
               <ChevronLeft size={15} />
             </button>
             <span className="text-sm font-medium">{pickerYear}</span>
-            <button
-              onClick={() => setPickerYear((y) => y + 1)}
-              className="text-muted hover:text-ink p-1"
-              aria-label="Próximo ano"
-            >
+            <button onClick={() => setPickerYear((y) => y + 1)} className="text-muted hover:text-ink p-1" aria-label="Próximo ano">
               <ChevronRight size={15} />
             </button>
           </div>

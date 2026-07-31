@@ -9,6 +9,11 @@ function daysInMonth(month: number, year: number) {
   return new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
 
+// Cartão de crédito nasce pendente (só quita na fatura); o resto já nasce pago.
+function computeIsPaid(paymentMethod: FixedExpenseTemplate['paymentMethod']) {
+  return paymentMethod !== 'CREDIT_CARD';
+}
+
 /**
  * Garante que toda despesa fixa recorrente ativa tenha uma Transaction de
  * verdade criada pro mês pedido — cria as que estiverem faltando. Pode
@@ -73,6 +78,8 @@ export async function ensureFixedExpenseInstances(userId: string, month: number,
       date: new Date(Date.UTC(year, month - 1, Math.min(t.dayOfMonth, daysInMonth(month, year)))),
       userId,
       templateId: t.id,
+      paymentMethod: t.paymentMethod ?? undefined,
+      isPaid: computeIsPaid(t.paymentMethod),
     })),
   });
 }

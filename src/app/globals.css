@@ -31,7 +31,7 @@
   --color-accent-soft: #29b6f6;
   --color-accent-contrast: #0b1720;
   --color-green: #4bbf88;
-  --color-red: #e5695a;
+  --color-red: #e57373;
 
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 28px -14px rgba(0, 0, 0, 0.55);
 }
@@ -41,23 +41,22 @@ body {
   color: var(--color-ink);
 }
 
-/* Tailwind's preflight resets <button> cursor to `default` (unlike the browser's
-   native `pointer`), which is why links looked clickable but buttons didn't. */
+* {
+  border-color: var(--color-line);
+}
+
+/* O reset do Tailwind tira o cursor de "mãozinha" dos <button> por padrão
+   (fica cursor: default), diferente do link — por isso os botões pareciam
+   "sem graça" de clicar. */
 button:not(:disabled),
 [role='button']:not(:disabled) {
   cursor: pointer;
-}
-
-* {
-  border-color: var(--color-line);
 }
 
 .font-tabular {
   font-variant-numeric: tabular-nums;
 }
 
-/* Signature row treatment: a soft accent rule that draws in on hover, evoking
-   a line item being underlined for attention. */
 .entry-row {
   position: relative;
   border-bottom: 1px solid var(--color-line);

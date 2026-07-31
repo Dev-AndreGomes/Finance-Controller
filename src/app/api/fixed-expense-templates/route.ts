@@ -37,6 +37,7 @@ export async function POST(request: NextRequest) {
         startYear: dto.startYear,
         endMonth: dto.repeats ? (dto.endMonth ?? null) : dto.startMonth,
         endYear: dto.repeats ? (dto.endYear ?? null) : dto.startYear,
+        paymentMethod: dto.paymentMethod,
         userId: user.id,
       },
     });

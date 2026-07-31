@@ -38,6 +38,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         subtype: nextType === 'EXPENSE' ? (dto.subtype ?? existing.subtype ?? 'VARIABLE') : null,
         date: dto.date ? new Date(dto.date) : undefined,
         categoryId: dto.categoryId === undefined ? undefined : dto.categoryId,
+        paymentMethod: dto.paymentMethod ?? undefined,
+        // botão "marcar como pago/pendente" — único jeito de mudar isPaid depois de criado
+        isPaid: dto.isPaid ?? undefined,
       },
       include: { category: true },
     });

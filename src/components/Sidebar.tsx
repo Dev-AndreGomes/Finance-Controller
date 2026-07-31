@@ -34,9 +34,7 @@ export function Sidebar({ userName, userEmail }: { userName: string; userEmail: 
         <div className="w-[22px]" />
       </div>
 
-      {open && (
-        <div className="md:hidden fixed inset-0 bg-black/50 z-40" onClick={() => setOpen(false)} />
-      )}
+      {open && <div className="md:hidden fixed inset-0 bg-black/50 z-40" onClick={() => setOpen(false)} />}
 
       <aside
         className={`w-64 shrink-0 border-r border-line flex flex-col bg-bg

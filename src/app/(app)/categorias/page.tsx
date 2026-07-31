@@ -7,7 +7,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useToast } from '@/context/ToastContext';
 import { Category, TransactionType } from '@/types';
 
-const SWATCHES = ['#1A237E', '#1A8F5C', '#C8402F', '#7207c4 ', '#378ADD', '#D4537E'];
+const SWATCHES = ['#1A237E', '#1A8F5C', '#C8402F', '#7F77DD', '#378ADD', '#D4537E'];
 
 export default function CategoriasPage() {
   const showToast = useToast();

@@ -38,7 +38,7 @@ export function AlertsPanel({
     fetch(`/api/transactions?startDate=${today.toISOString()}&endDate=${limit.toISOString()}`)
       .then((r) => r.json())
       .then((data: Transaction[]) => {
-        setUpcomingInstallments(data.filter((t) => t.installmentTotal != null));
+        setUpcomingInstallments(data.filter((t) => t.installmentTotal != null && !t.isPaid));
       });
   }, []);
 
