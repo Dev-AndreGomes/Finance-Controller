@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { signUp } from '@/lib/auth-client';
 import { inputClass, primaryButtonClass } from '@/components/ui';
+import { Logo } from '@/components/Logo';
 
 export default function RegistroPage() {
   const router = useRouter();
@@ -31,8 +32,8 @@ export default function RegistroPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-bg text-ink px-4">
       <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <img src="./images/finance-controller-logo.png" alt="Finance Controller" className="h-28 w-auto mx-auto" />
+        <div className="flex flex-col items-center text-center mb-8 gap-2">
+          <Logo height={70} />
           <p className="text-muted text-sm mt-2">Crie sua conta para começar</p>
         </div>
         <form onSubmit={handleSubmit} className="bg-surface border border-line rounded-2xl p-6 space-y-4 shadow-[var(--shadow-card)]">

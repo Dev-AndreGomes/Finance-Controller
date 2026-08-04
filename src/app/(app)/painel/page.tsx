@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
   Bell,
   Clock,
+  Download,
   Eye,
   EyeOff,
   Pencil,
@@ -26,6 +27,7 @@ import { ListFilters, ListFilterState, EMPTY_FILTERS } from '@/components/ListFi
 import { useToast } from '@/context/ToastContext';
 import { formatCurrency, formatDate, MONTH_NAMES } from '@/lib/format';
 import { PAYMENT_METHOD_LABELS, PAYMENT_METHOD_OPTIONS, paymentMethodStartsAsPaid } from '@/lib/payment-methods';
+import { downloadCsv, transactionsToCsv } from '@/lib/csv-export';
 
 type Tab = 'INCOME' | 'FIXED' | 'VARIABLE';
 
@@ -68,6 +70,7 @@ export default function PainelPage() {
   const [deleteTarget, setDeleteTarget] = useState<Transaction | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
   const [filters, setFilters] = useState<ListFilterState>(EMPTY_FILTERS);
+  const [filterOpen, setFilterOpen] = useState(false);
 
   async function load() {
     const { start, end } = monthRange(month, year);
@@ -87,6 +90,35 @@ export default function PainelPage() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [month, year]);
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      const target = e.target as HTMLElement;
+      const isTyping = ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable;
+      if (isTyping) return;
+
+      const anyModalOpen = showAddModal || showInvestModal || showNewFixedModal || showManageFixedModal || !!deleteTarget;
+      if (anyModalOpen) return;
+
+      if (e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        if (activeTab === 'FIXED') {
+          setShowNewFixedModal(true);
+        } else {
+          setEditingTransaction(null);
+          setShowAddModal(true);
+        }
+      }
+
+      if (e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        setFilterOpen(true);
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeTab, showAddModal, showInvestModal, showNewFixedModal, showManageFixedModal, deleteTarget]);
 
   const incomeList = useMemo(() => transactions.filter((t) => t.type === 'INCOME'), [transactions]);
   const fixedList = useMemo(() => transactions.filter((t) => t.type === 'EXPENSE' && t.subtype === 'FIXED'), [transactions]);
@@ -194,7 +226,21 @@ export default function PainelPage() {
           <p className="text-sm text-muted mt-1">Seu resumo financeiro do mês</p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 ml-auto">
+          <button
+            onClick={() => {
+              const csv = transactionsToCsv(transactions);
+              downloadCsv(`orcamento-${MONTH_NAMES[month - 1].toLowerCase()}-${year}.csv`, csv);
+              showToast('success', 'CSV exportado!');
+            }}
+            disabled={transactions.length === 0}
+            className="text-muted hover:text-ink transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            aria-label="Exportar CSV"
+            title="Exportar lançamentos do mês em CSV"
+          >
+            <Download size={18} />
+          </button>
+
           <div className="relative">
             <button
               onClick={() => setShowNotifications((v) => !v)}
@@ -273,7 +319,7 @@ export default function PainelPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
-        <Card className="lg:col-span-3 p-0 overflow-hidden">
+        <Card className="lg:col-span-3 p-0">
           <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-line">
             <p className="text-sm font-medium">
               {activeTab === 'INCOME' ? 'Receitas' : activeTab === 'FIXED' ? 'Despesas fixas' : 'Despesas variáveis'}
@@ -285,6 +331,8 @@ export default function PainelPage() {
                 showPaymentFilters={activeTab !== 'INCOME'}
                 value={filters}
                 onChange={setFilters}
+                open={filterOpen}
+                onOpenChange={setFilterOpen}
               />
               <button
                 onClick={() => {
@@ -298,13 +346,14 @@ export default function PainelPage() {
                 className={`${primaryButtonClass} !py-1.5 !px-3 text-xs`}
               >
                 <Plus size={13} /> Adicionar
+                <kbd className="hidden sm:inline text-[10px] bg-black/10 dark:bg-white/10 rounded px-1 ml-0.5">N</kbd>
               </button>
             </div>
           </div>
 
           {/* lista com altura máxima e rolagem própria — assim, mesmo com
               muitos lançamentos, o gráfico ao lado não fica lá embaixo */}
-          <div className="max-h-[30rem] overflow-y-auto">
+          <div className="max-h-[30rem] overflow-y-auto rounded-b-2xl">
             {filteredList.length === 0 ? (
               <p className="text-muted text-sm p-6">
                 {activeList.length === 0 ? TAB_CONFIG[activeTab].empty : 'Nenhum lançamento bate com esse filtro.'}

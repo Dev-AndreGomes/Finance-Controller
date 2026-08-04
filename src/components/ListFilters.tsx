@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { Filter } from 'lucide-react';
 import { Category, PaymentMethod } from '@/types';
 import { inputClass, secondaryButtonClass } from './ui';
@@ -20,35 +20,41 @@ export function ListFilters({
   showPaymentFilters,
   value,
   onChange,
+  open,
+  onOpenChange,
 }: {
   categories: Category[];
   showCategoryFilter: boolean;
   showPaymentFilters: boolean;
   value: ListFilterState;
   onChange: (filters: ListFilterState) => void;
+  // Controlado de fora — assim o atalho de teclado "F" também consegue abrir.
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target as Node)) onOpenChange(false);
     }
     if (open) document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const isActive = value.categoryId !== '' || value.paymentMethod !== '' || value.status !== 'ALL';
 
   return (
     <div className="relative" ref={ref}>
-      <button onClick={() => setOpen((v) => !v)} className={`${secondaryButtonClass} !py-1.5 !px-3 text-xs relative`}>
+      <button onClick={() => onOpenChange(!open)} className={`${secondaryButtonClass} !py-1.5 !px-3 text-xs relative`}>
         <Filter size={13} /> Filtro
+        <kbd className="hidden sm:inline text-[10px] bg-black/10 dark:bg-white/10 rounded px-1 ml-0.5">F</kbd>
         {isActive && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-accent" />}
       </button>
 
       {open && (
-        <div className="fixed bg-surface border border-line rounded-xl shadow-[var(--shadow-card)] p-4 z-50 w-64 space-y-3">
+        <div className="absolute top-full right-0 mt-2 bg-surface border border-line rounded-xl shadow-[var(--shadow-card)] p-4 z-20 w-64 space-y-3">
           {showCategoryFilter && (
             <div>
               <label className="text-xs text-muted uppercase tracking-wide">Categoria</label>

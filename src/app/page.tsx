@@ -1,3 +1,4 @@
+import { Logo } from '@/components/Logo';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { BarChart3, PiggyBank, TrendingUp } from 'lucide-react';
@@ -29,7 +30,7 @@ export default async function LandingPage() {
   return (
     <div className="min-h-screen bg-bg text-ink">
       <header className="max-w-6xl mx-auto px-6 py-6 flex items-center justify-between">
-        <img src="./images/finance-controller-logo.png" alt="Finance Controller" className="h-20 w-auto" />
+        <Logo height={70} />
         <div className="flex items-center gap-4">
           <ThemeToggle />
           <Link href="/login" className="text-sm text-muted hover:text-ink transition-colors">

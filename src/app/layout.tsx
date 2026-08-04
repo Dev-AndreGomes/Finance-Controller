@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   title: 'Finance Controller',
   description: 'Controle financeiro mensal simples: receitas, despesas e simulação de investimento.',
   icons: {
-    icon: './images/finance-controller-icon.png',
+    icon: '/images/finance-controller-icon.png',
   },
 };
 

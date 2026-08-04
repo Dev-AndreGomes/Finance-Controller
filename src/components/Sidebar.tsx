@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { LayoutDashboard, History, Tags, Menu, X, LogOut } from 'lucide-react';
 import { signOut } from '@/lib/auth-client';
 import { ThemeToggle } from './ThemeToggle';
+import { Logo } from './Logo';
 
 const NAV_ITEMS = [
   { href: '/painel', label: 'Painel', icon: LayoutDashboard },
@@ -30,7 +31,7 @@ export function Sidebar({ userName, userEmail }: { userName: string; userEmail: 
         <button onClick={() => setOpen(true)} aria-label="Abrir menu" className="text-ink">
           <Menu size={22} />
         </button>
-        <p className="text-base font-medium">Finance Controller</p>
+        <Logo height={50} />
         <div className="w-[22px]" />
       </div>
 
@@ -41,12 +42,12 @@ export function Sidebar({ userName, userEmail }: { userName: string; userEmail: 
           fixed md:static inset-y-0 left-0 z-50 transition-transform duration-200
           ${open ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}
       >
-        <div className="px-6 py-7 border-b border-line flex items-center justify-between">
-          <div>
-            <img src="./images/finance-controller-logo.png" alt="Finance Controller"  />
-            <p className="text-xs text-muted mt-0.5">Seu controle financeiro mensal</p>
+        <div className="px-6 py-5 border-b border-line flex items-center justify-between">
+          <div className="min-w-0">
+            <Logo height={70} />
+            <p className="text-xs text-muted mt-2 px-4">Seu controle financeiro mensal</p>
           </div>
-          <button onClick={() => setOpen(false)} className="md:hidden text-muted hover:text-ink">
+          <button onClick={() => setOpen(false)} className="md:hidden text-muted hover:text-ink shrink-0">
             <X size={20} />
           </button>
         </div>

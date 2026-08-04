@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode } from 'react';
+import { ReactNode, useEffect } from 'react';
 import { X } from 'lucide-react';
 
 export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
@@ -12,6 +12,17 @@ export function Card({ children, className = '' }: { children: ReactNode; classN
 }
 
 export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  // Esc fecha o modal — como todo modal do app usa esse mesmo componente,
+  // implementar aqui uma vez cobre tudo (inclusive o ConfirmDialog, que é
+  // montado em cima deste).
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose();
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-[2px] flex items-center justify-center z-50 px-4">
       <div className="bg-surface border border-line rounded-2xl w-full max-w-md p-6 shadow-[var(--shadow-card)] max-h-[90vh] overflow-y-auto">
